@@ -14,6 +14,49 @@ import bcModSdk from "bondage-club-mod-sdk";
 declare const __NICKNAME__: string;
 
 /**
+ * A member of a SlimeBeep group chat, as SlimeBeep's API returns it.
+ */
+export interface SlimeBeepGroupMember {
+  memberNumber: number;
+  name: string;
+  online: boolean;
+  role: "owner" | "admin" | "member";
+}
+
+/**
+ * A SlimeBeep group chat the player is in, as SlimeBeep's API returns it (a copy).
+ */
+export interface SlimeBeepGroup {
+  id: string;
+  name: string;
+  owner: number;
+  admins: number[];
+  anyoneCanInvite: boolean;
+  canInvite: boolean;
+  members: SlimeBeepGroupMember[];
+  /** The group's picture as a data: URL, or null. */
+  picture: string | null;
+}
+
+/** Events SlimeBeep's API can report. */
+export type SlimeBeepEvent =
+  "group" | "groupGone" | "presence" | "slimeBeepFriend";
+
+/**
+ * The parts of SlimeBeep's API (`window.SlimeBeep.api`, version 1) CRABS uses.
+ * Documented at https://github.com/Proudkiller0015/slimebeep/blob/main/API.md
+ */
+interface SlimeBeepApi {
+  apiVersion: number;
+  groups(): SlimeBeepGroup[];
+  hasSlimeBeep(memberNumber: number): boolean;
+  openChat(memberNumber: number): boolean;
+  openGroup(id: string): boolean;
+  openInvite(memberNumber: number): boolean;
+  on(type: SlimeBeepEvent, fn: (data: unknown) => void): () => void;
+}
+
+/**
  * Static class for handling integration and compatibility with other mods.
  */
 export abstract class CrossMod {
@@ -209,6 +252,99 @@ export abstract class CrossMod {
       return win.AFCLoversPrivateRoom?.[memberNumber] ?? null;
     } catch {
       return null;
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+   *  SlimeBeep Integration
+   * ══════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Returns SlimeBeep's API when a compatible version (API version 1) is loaded.
+   */
+  protected static getSlimeBeepApi(): SlimeBeepApi | null {
+    const api = (window as Window & { SlimeBeep?: { api?: SlimeBeepApi } })
+      .SlimeBeep?.api;
+    return api?.apiVersion === 1 ? api : null;
+  }
+
+  /**
+   * Checks if SlimeBeep is installed and active.
+   */
+  static isSlimeBeepInstalled(): boolean {
+    return CrossMod.getSlimeBeepApi() !== null;
+  }
+
+  /**
+   * Checks if a friend is known to have SlimeBeep too.
+   */
+  static hasSlimeBeep(memberNumber: number): boolean {
+    try {
+      return CrossMod.getSlimeBeepApi()?.hasSlimeBeep(memberNumber) === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Retrieves the player's SlimeBeep group chats (copies; never any message text).
+   */
+  static getSlimeBeepGroups(): SlimeBeepGroup[] {
+    try {
+      const groups = CrossMod.getSlimeBeepApi()?.groups();
+      return Array.isArray(groups) ? groups : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Opens SlimeBeep on a chat with a member. Returns false if it could not.
+   */
+  static openSlimeBeepChat(memberNumber: number): boolean {
+    try {
+      return CrossMod.getSlimeBeepApi()?.openChat(memberNumber) === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Opens SlimeBeep on one of the player's group chats. Returns false if it could not.
+   */
+  static openSlimeBeepGroup(id: string): boolean {
+    try {
+      return CrossMod.getSlimeBeepApi()?.openGroup(id) === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Opens SlimeBeep's "Invite them to…" list for a member, so the player picks a group.
+   * Returns false if it could not.
+   */
+  static openSlimeBeepInvite(memberNumber: number): boolean {
+    try {
+      return CrossMod.getSlimeBeepApi()?.openInvite(memberNumber) === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Listens to a SlimeBeep event and returns a function that stops listening
+   * (it does nothing when SlimeBeep is not loaded).
+   */
+  static onSlimeBeep(
+    type: SlimeBeepEvent,
+    fn: (data: unknown) => void,
+  ): () => void {
+    try {
+      const stop = CrossMod.getSlimeBeepApi()?.on(type, fn);
+      return typeof stop === "function" ? stop : () => {};
+    } catch {
+      return () => {};
     }
   }
 }
